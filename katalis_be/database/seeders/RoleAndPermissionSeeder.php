@@ -28,15 +28,17 @@ class RoleAndPermissionSeeder extends Seeder
             'manage master data',
         ];
 
+        // Create permissions
         foreach ($permissions as $permission) {
             Permission::create(['name' => $permission]);
         }
 
-        // Create roles and assign permissions
-        $adminRole = Role::create(['name' => 'admin']);
+        // Create admin role first
+        $adminRole = Role::create(['name' => 'admin', 'guard_name' => 'web']);
         $adminRole->givePermissionTo(Permission::all());
 
-        $operatorRole = Role::create(['name' => 'operator']);
+        // Create operator role
+        $operatorRole = Role::create(['name' => 'operator', 'guard_name' => 'web']);
         $operatorRole->givePermissionTo([
             'view reports',
             'create reports',

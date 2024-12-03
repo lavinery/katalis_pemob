@@ -1,51 +1,40 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\DashboardController;
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\MemberController;
+use App\Http\Controllers\EventController;
+use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
+// Redirect root to login
+Route::redirect('/', '/login');
+
+// Dashboard route
+Route::get('/dashboard', function () {
     return view('dashboard');
-});
+})->middleware(['auth', 'verified'])->name('dashboard');
 
-// Redirect ke dashboard setelah login
-Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth'])
-    ->name('dashboard');
+Route::resource('events', EventController::class)->middleware('auth');
 
+// Auth protected routes
 Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // // Route untuk Admin
-    // Route::middleware(['check.role:admin'])->group(function () {
-    //     Route::get('/master-data', function () {
-    //         return view('admin.master-data');
-    //     })->name('master-data');
+    // Profile routes 
+    Route::controller(ProfileController::class)->group(function () {
+        Route::get('/profile', 'edit')->name('profile.edit');
+        Route::patch('/profile', 'update')->name('profile.update');
+        Route::delete('/profile', 'destroy')->name('profile.destroy');
+    });
 
-    //     Route::get('/user-management', function () {
-    //         return view('admin.user-management');
-    //     })->name('user-management');
-    // });
+    // Admin only routes
+    Route::middleware('role:admin')->group(function () {
+        Route::resource('users', UserController::class);
+    });
 
-    // // Route untuk Operator
-    // Route::middleware(['check.role:operator,admin'])->group(function () {
-    //     Route::get('/input-data', function () {
-    //         return view('operator.input-data');
-    //     })->name('input-data');
-
-    //     Route::get('/report', function () {
-    //         return view('operator.report');
-    //     })->name('report');
-    // });
+    Route::middleware(['auth', 'role:admin'])->group(function () {
+        Route::resource('members', MemberController::class);
+    });
 });
 
-
-
-Route::middleware(['auth', 'role:admin'])->group(function () {
-    Route::resource('users', UserController::class);
-});
-
+// Auth routes
 require __DIR__ . '/auth.php';

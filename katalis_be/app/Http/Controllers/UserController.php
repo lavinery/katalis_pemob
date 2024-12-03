@@ -6,88 +6,124 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(['auth', 'role:admin']);
+    }
+
     public function index()
     {
-        $users = User::with('roles')->paginate(10);
-        return view('admin.users.index', compact('users'));
+        try {
+            $users = User::with('roles')->paginate(10);
+            return view('users.index', compact('users'));
+        } catch (\Exception $e) {
+            Log::error('Error in user index: ' . $e->getMessage());
+            return back()->with('error', 'Unable to load users list.');
+        }
     }
 
     public function create()
     {
-        $roles = Role::all();
-        return view('admin.users.create', compact('roles'));
+        try {
+            $roles = Role::all();
+            return view('users.create', compact('roles'));
+        } catch (\Exception $e) {
+            Log::error('Error in user create: ' . $e->getMessage());
+            return back()->with('error', 'Unable to load create form.');
+        }
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'password' => ['required', 'confirmed', Password::defaults()],
-            'roles' => ['required', 'array']
-        ]);
+        try {
+            $validated = $request->validate([
+                'name' => ['required', 'string', 'max:255'],
+                'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+                'password' => ['required', 'string', 'min:8', 'confirmed'],
+                'role' => ['required', 'exists:roles,name']
+            ]);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => Hash::make($validated['password']),
+            ]);
 
-        $user->assignRole($request->roles);
+            $user->assignRole($validated['role']);
 
-        return redirect()->route('users.index')
-            ->with('success', 'User created successfully.');
+            return redirect()->route('users.index')
+                ->with('success', 'User created successfully.');
+        } catch (\Exception $e) {
+            Log::error('Error creating user: ' . $e->getMessage());
+            return back()->withInput()
+                ->with('error', 'Failed to create user.');
+        }
     }
 
     public function edit(User $user)
     {
-        $roles = Role::all();
-        $userRoles = $user->roles->pluck('name')->toArray();
-        return view('admin.users.edit', compact('user', 'roles', 'userRoles'));
+        try {
+            $roles = Role::all();
+            return view('users.edit', compact('user', 'roles'));
+        } catch (\Exception $e) {
+            Log::error('Error in user edit: ' . $e->getMessage());
+            return back()->with('error', 'Unable to load edit form.');
+        }
     }
 
     public function update(Request $request, User $user)
     {
-        $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
-            'roles' => ['required', 'array']
-        ]);
-
-        $user->update([
-            'name' => $request->name,
-            'email' => $request->email,
-        ]);
-
-        if ($request->filled('password')) {
-            $request->validate([
-                'password' => ['confirmed', Password::defaults()],
+        try {
+            $validated = $request->validate([
+                'name' => ['required', 'string', 'max:255'],
+                'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
+                'role' => ['required', 'exists:roles,name']
             ]);
 
             $user->update([
-                'password' => Hash::make($request->password),
+                'name' => $validated['name'],
+                'email' => $validated['email'],
             ]);
+
+            if ($request->filled('password')) {
+                $request->validate([
+                    'password' => ['required', 'string', 'min:8', 'confirmed'],
+                ]);
+
+                $user->update([
+                    'password' => Hash::make($request->password),
+                ]);
+            }
+
+            $user->syncRoles([$validated['role']]);
+
+            return redirect()->route('users.index')
+                ->with('success', 'User updated successfully.');
+        } catch (\Exception $e) {
+            Log::error('Error updating user: ' . $e->getMessage());
+            return back()->withInput()
+                ->with('error', 'Failed to update user.');
         }
-
-        $user->syncRoles($request->roles);
-
-        return redirect()->route('users.index')
-            ->with('success', 'User updated successfully.');
     }
 
     public function destroy(User $user)
     {
-        if ($user->id === auth()->id()) {
-            return back()->with('error', 'You cannot delete yourself.');
+        try {
+            if (auth()->id() === $user->id) {
+                return back()->with('error', 'You cannot delete yourself.');
+            }
+
+            $user->delete();
+
+            return redirect()->route('users.index')
+                ->with('success', 'User deleted successfully.');
+        } catch (\Exception $e) {
+            Log::error('Error deleting user: ' . $e->getMessage());
+            return back()->with('error', 'Failed to delete user.');
         }
-
-        $user->delete();
-
-        return redirect()->route('users.index')
-            ->with('success', 'User deleted successfully.');
     }
 }
